@@ -77,9 +77,9 @@ func _reject_gap(idx: int, message: String) -> void:
 	var old: Material=marker.material_override
 	var red:=StandardMaterial3D.new();red.albedo_color=Color("ff694f");red.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
 	marker.material_override=red
-	var marker_ref:=weakref(marker)
+	var marker_ref: WeakRef=weakref(marker)
 	get_tree().create_timer(0.65).timeout.connect(func():
-		var node=marker_ref.get_ref()
+		var node: Object=marker_ref.get_ref()
 		if is_instance_valid(node) and node.material_override==red:node.material_override=old)
 ''')
 # Correct drag selection and distinguish a tap, a camera swipe and a pinch.
@@ -109,7 +109,7 @@ s=replace_func(s,"_input",'''func _input(event: InputEvent) -> void:
 	if event is InputEventScreenDrag:
 		touches[event.index]=event.position
 		if touches.size()==2 and modal==null and screen=="game":
-			var points:=touches.values()
+			var points: Array=touches.values()
 			var gap: float=points[0].distance_to(points[1])
 			var mid: Vector2=(points[0]+points[1])*0.5
 			if pinch_previous>0.0:
