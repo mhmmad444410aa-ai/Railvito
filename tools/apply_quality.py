@@ -93,7 +93,7 @@ change("scripts/strings.gd","const ADVENTURE_WORDS := {",'''const ADVENTURE_WORD
 # Real green leaves and brown trunks instead of the turquoise toy material in the recording.
 f=p/"scripts/world_builder.gd";s=f.read_text()
 s=s.replace('m.metallic_specular=0.22','''m.metallic_specular=0.22
-				var mat_name:=m.resource_name.to_lower()
+				var mat_name: String=str(m.resource_name).to_lower()
 				if world_id!=3:
 					if "leaf" in mat_name or "leav" in mat_name or "foliage" in mat_name:
 						m.albedo_color=Color("438947" if "dark" in mat_name else "559e50")
@@ -270,3 +270,10 @@ if compact.is_file() and not approved.is_file():
     assert icon=="res://assets/approved_launcher.webp"
 assert icon!="res://assets/icon.svg","The approved icon is required"
 print("QUALITY_TEXTURES_OK: four used tileable material maps; approved launcher asset verified")
+
+# The earlier visual regression test remains enabled; align its expected version
+# with the actual project version without changing any gameplay assertions.
+f=p/"tests/verify_polish.gd"
+s=f.read_text()
+assert '=="1.4.0"' in s
+f.write_text(s.replace('=="1.4.0"','=="1.5.0"'))
