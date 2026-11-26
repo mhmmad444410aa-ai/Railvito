@@ -56,16 +56,16 @@ jobs:
         run: |
           set -euo pipefail
           godot --headless --editor --import 2>&1 | tee build/import.log
-          if rg 'SCRIPT ERROR|^ERROR:' build/import.log; then exit 1; fi
+          if grep -E 'SCRIPT ERROR|^ERROR:' build/import.log; then exit 1; fi
           timeout 60 godot --headless -- --self-test 2>&1 | tee build/self-test.log
-          rg 'RAILVITO_SELF_TEST_OK' build/self-test.log
+          grep -E 'RAILVITO_SELF_TEST_OK' build/self-test.log
           for test in engines worlds cab; do
             XDG_DATA_HOME="$RUNNER_TEMP/railvito-$test" timeout 60 godot --headless --script "res://tests/verify_$test.gd" 2>&1 | tee "build/$test.log"
           done
-          if rg 'SCRIPT ERROR|^ERROR:' build/*.log; then exit 1; fi
-          rg 'TOAST_LIFETIME_CHECK_OK' build/engines.log
-          rg 'WORLD_EXPANSION_PASS' build/worlds.log
-          rg 'CAB_CHECK_OK' build/cab.log
+          if grep -E 'SCRIPT ERROR|^ERROR:' build/*.log; then exit 1; fi
+          grep -E 'TOAST_LIFETIME_CHECK_OK' build/engines.log
+          grep -E 'WORLD_EXPANSION_PASS' build/worlds.log
+          grep -E 'CAB_CHECK_OK' build/cab.log
           python3 tools/verify_assets.py
       - name: Build test APK
         working-directory: source/Railvito
