@@ -300,3 +300,68 @@ f.write_text(s)
 f=p/"tests"/"verify_worlds.gd";q=f.read_text().replace(".slice(10):",".slice(10,18):").replace("game.stars.size()==18","game.stars.size()==24");f.write_text(q)
 f=p/"tests"/"verify_cab.gd";f.write_text(f.read_text().replace("all 18 missions","all 24 missions"))
 print("RAILVITO_DELUXE_PATCH_OK: 24 missions; original scalable 2D kit and new menu")
+
+# Retain manual rotation, undo AND redo; make auto-fit optional from Settings.
+f=p/"scripts"/"main.gd";s=f.read_text()
+s=s.replace('Vector2(361,10),Vector2(92,74),_rotate_piece','Vector2(361,10),Vector2(78,74),_rotate_piece')
+s=s.replace('Vector2(462,10),Vector2(92,74),_undo','Vector2(447,10),Vector2(78,74),_undo')
+s=s.replace('Vector2(564,10),Vector2(169,74),_hint','Vector2(619,10),Vector2(114,74),_hint')
+s=s.replace('\t\tselected_label=_label("",Vector2(10,82)', '\t\tvar redo_button:=_deluxe_button("",Vector2(533,10),Vector2(78,74),_redo,"blue","") if false else _deluxe_button("",Vector2(533,10),Vector2(78,74),_redo,"blue","",controls)\n\t\tredo_button.icon=load("res://assets/cab/redo.svg");redo_button.expand_icon=true;redo_button.add_theme_constant_override("icon_max_width",42)\n\t\tselected_label=_label("",Vector2(10,82)')
+s=s.replace('var redo_button:=_deluxe_button("",Vector2(533,10),Vector2(78,74),_redo,"blue","") if false else _deluxe_button','var redo_button:=_deluxe_button')
+s=s.replace('t("hint").replace("✦","").strip_edges(),Vector2(619','"",Vector2(619')
+s=s.replace('var p:=_open_modal(Vector2(700,565))','var p:=_open_modal(Vector2(700,610))')
+s=s.replace('\t_button(t("close"),Vector2(28,454),Vector2(630,64),func():_save();_close_modal(),TEAL,p)', '''	_label(t("fit_mode"),Vector2(28,420),Vector2(280,50),21,INK,p)
+	_button(t("fit_easy") if easy_placement else t("fit_manual"),Vector2(320,420),Vector2(338,52),func(): easy_placement=not easy_placement;_save();_settings(),Color("e5ebd8"),p)
+	_button(t("close"),Vector2(28,527),Vector2(630,64),func():_save();_close_modal();_game_ui() if screen=="game" else _show_menu() if screen=="menu" else _refresh_screen(),TEAL,p)''')
+# Keep original screen on settings close; reflow HUD only while playing.
+s=s.replace('func():_save();_close_modal();_game_ui() if screen=="game" else _show_menu() if screen=="menu" else _refresh_screen()','func():_save();_close_modal();_game_ui() if screen=="game" else _show_menu() if screen=="menu" else _close_modal()')
+s=s.replace('c.set_value("settings","language",language);','c.set_value("settings","easy_placement",easy_placement)\n\tc.set_value("settings","language",language);')
+s=s.replace('var lang=str(c.get_value("settings","language","en_GB"))','easy_placement=bool(c.get_value("settings","easy_placement",true))\n\tvar lang=str(c.get_value("settings","language","en_GB"))')
+# Correct first-run camera framing and make the rail gaps much easier to identify.
+s=s.replace('zoom=39.0 if world_id>=2 else (29.5 if world_id==0 else 31.5)','zoom=35.5 if world_id>=2 else (26.5 if world_id==0 else 28.5)')
+f.write_text(s)
+f=p/"scripts"/"strings.gd";q=f.read_text().replace('const ADVENTURE_WORDS := {','''const ADVENTURE_WORDS := {
+	"fit_mode": ["Track placement","تركيب السكك","Encaixe dos trilhos"],
+	"fit_easy": ["Easy • tap a gap","سهل • انقر على الفراغ","Fácil • toque na lacuna"],
+	"fit_manual": ["Manual • rotate pieces","يدوي • دوّر القطع","Manual • gire as peças"],''');f.write_text(q)
+# Replace pastel toy-board materials with a more vivid landscape palette.
+f=p/"scripts"/"world_builder.gd";q=f.read_text()
+for old,new in [('9cd8db','65b5e6'),('edf3db','dcf4ff'),('d6dfcb','80b76a'),('78a56e','6dbb50'),('6aa891','54a870'),('f5dfad','d6bb78'),('bd9166','986d49'),('a7cba0','7dbb56'),('83b58e','5ca35b'),('b5d4a5','a3ca67'),('Vector3(rng.randf_range(4.0,6.2),rng.randf_range(1.1,2.5),rng.randf_range(3.5,5.4))','Vector3(rng.randf_range(5.4,8.4),rng.randf_range(1.4,3.0),rng.randf_range(4.6,7.0))')]:
+    q=q.replace(old,new)
+# Keep rounded hills low and distant; do not modify the route or collisions.
+f.write_text(q)
+f=p/"scripts"/"adventure_art.gd";q=f.read_text().replace('["54854f","78a661","577552"]','["3d8b48","89c963","547957"]').replace('art.material("c0d5d8",0.34)','art.material("e2edf2",0.30)').replace('side*0.30-0.045,side*0.30+0.045','side*0.30-0.065,side*0.30+0.065').replace('art.material("8c5a39")','art.material("855032")');f.write_text(q)
+# Real UI smoke test: construct menu and HUD in each supported locale and check actual controls.
+(p/"tests"/"verify_deluxe.gd").write_text('''extends SceneTree
+func _initialize() -> void:
+	call_deferred("verify")
+func verify() -> void:
+	var game = load("res://scenes/main.tscn").instantiate()
+	root.add_child(game)
+	await process_frame
+	game.set_process(false)
+	for lang in ["en_GB","ar","pt_BR"]:
+		game.language=lang
+		game._show_menu()
+		await process_frame
+		for name in ["MenuLandscape","MenuPlay","MenuWorlds","MenuAdventures"]:
+			assert(game.ui.find_child(name,true,false)!=null,name)
+		game._start_level(0)
+		await process_frame
+		for name in ["CabBell","CabBrake","CabLever"]:
+			assert(game.ui.find_child(name,true,false)!=null,name)
+		assert(game.selected_buttons.size()==2)
+		var idx: int=game.missing[0]
+		var gap: Vector2=game.camera.unproject_position(game.route.pieces[idx].center)
+		assert(game._nearest_gap(gap,105.0)==idx)
+		game.easy_placement=true
+		game._drop_at(gap)
+		# A marker covered by the bottom UI must not receive a touch.
+		if gap.y<590:assert(not game.missing.has(idx))
+		game._settings()
+		game._close_modal()
+	print("DELUXE_UI_PASS: menu, controls, locales and assisted placement")
+	game.queue_free()
+	await process_frame
+	quit(0)
+''')
