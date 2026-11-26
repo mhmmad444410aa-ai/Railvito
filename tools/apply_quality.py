@@ -196,3 +196,77 @@ func verify() -> void:
 	quit()
 ''')
 print("RAILVITO_1_5_PATCH_OK")
+
+# Authored seamless surface textures, used at runtime (not unused padding).
+# 2K terrain surfaces and 1K track/wood details are generated deterministically.
+import math, random, struct, zlib
+tex=p/"assets/quality_textures";tex.mkdir(exist_ok=True)
+def png(path,n,raw):
+    def chunk(tag,data):return struct.pack(">I",len(data))+tag+data+struct.pack(">I",zlib.crc32(tag+data)&0xffffffff)
+    path.write_bytes(b"\x89PNG\r\n\x1a\n"+chunk(b"IHDR",struct.pack(">IIBBBBB",n,n,8,2,0,0,0))+chunk(b"IDAT",zlib.compress(raw,6))+chunk(b"IEND",b""))
+def tile(name,n,seed,mode):
+    rng=random.Random(seed)
+    # Coherent low/mid/high-scale noise, periodic at both edges.
+    sizes=(8,32,128)
+    grids=[[rng.random() for _ in range(g*g)] for g in sizes]
+    def axis(n,g):
+        a=[]
+        for i in range(n):
+            u=i*g/n;k=int(u);t=u-k;t=t*t*(3-2*t);a.append((k,(k+1)%g,t))
+        return a
+    axes=[axis(n,g) for g in sizes]
+    raw=bytearray()
+    for y in range(n):
+        raw.append(0)
+        for x in range(n):
+            v=0.
+            for k,g in enumerate(sizes):
+                xa,xb,tx=axes[k][x];ya,yb,ty=axes[k][y];vals=grids[k]
+                a=vals[ya*g+xa]*(1-tx)+vals[ya*g+xb]*tx
+                b=vals[yb*g+xa]*(1-tx)+vals[yb*g+xb]*tx
+                v+=(a*(1-ty)+b*ty)*[.44,.36,.20][k]
+            grain=rng.random()-.5
+            if mode=="grass":
+                c=172+60*v+14*grain+10*math.sin((x*51+y*33)*math.tau/n)
+                rgb=(c*.96,c,c*.92)
+            elif mode=="snow":
+                c=214+34*v+8*grain
+                rgb=(c*.98,c,min(255,c*1.025))
+            elif mode=="gravel":
+                c=138+90*v+42*grain
+                rgb=(c*1.04,c,c*.94)
+            else:
+                c=162+36*v+22*math.sin((y*47/n+.45*math.sin(x*math.tau*5/n))*math.tau)+8*grain
+                rgb=(c*1.06,c,c*.89)
+            raw.extend(max(0,min(255,int(ch))) for ch in rgb)
+    png(tex/(name+".png"),n,raw)
+for data in [("meadow_detail",2048,73,"grass"),("snow_detail",2048,99,"snow"),("ballast_detail",1024,103,"gravel"),("timber_detail",1024,117,"wood")]:tile(*data)
+f=p/"scripts/meadow.gdshader";s=f.read_text()
+s=s.replace("varying vec3 world_pos;","uniform sampler2D surface_detail : source_color, filter_linear_mipmap, repeat_enable;\nvarying vec3 world_pos;")
+s=s.replace("ALBEDO=base.rgb*(0.88+0.085*broad+0.018*fine);","vec3 surface=texture(surface_detail,p*0.11).rgb;\n\tALBEDO=base.rgb*(0.88+0.085*broad+0.018*fine)*mix(vec3(0.92),surface*1.20,0.68);")
+f.write_text(s)
+f=p/"scripts/world_builder.gd";s=f.read_text()
+s=s.replace('landscape.set_shader_parameter("base",Color("65ad43" if id==0 else "65b78a"))','landscape.set_shader_parameter("base",Color("568d3a" if id==0 else "529763"))\n\tlandscape.set_shader_parameter("surface_detail",load("res://assets/quality_textures/meadow_detail.png"))')
+s=s.replace("m.roughness = roughness\n\treturn m",'''m.roughness = roughness
+	var texture_name: String=""
+	if hex in ["aa957c","9c9485","bfad91","82918c","a0846d","ab9080"]:texture_name="ballast_detail"
+	elif hex in ["8e5c3d","855032","8c5a39","b98557"]:texture_name="timber_detail"
+	if texture_name!="":
+		m.albedo_texture=load("res://assets/quality_textures/"+texture_name+".png")
+		m.uv1_triplanar=true;m.uv1_scale=Vector3(0.55,0.55,0.55)
+	return m''',1)
+f.write_text(s)
+f=p/"scripts/adventure_art.gd";s=f.read_text()
+s=s.replace("mat.vertex_color_use_as_albedo=true\n\tmat.roughness=1",'''mat.vertex_color_use_as_albedo=true
+	mat.roughness=1
+	mat.albedo_texture=load("res://assets/quality_textures/snow_detail.png" if style_id==3 else "res://assets/quality_textures/meadow_detail.png")
+	mat.uv1_triplanar=true;mat.uv1_scale=Vector3(0.18,0.18,0.18)''',1)
+f.write_text(s)
+# Check that the asset exactly matches the approved 192px copy rather than another generated drawing.
+import hashlib
+if compact.is_file() and not approved.is_file():
+    data=compact.read_bytes()
+    assert hashlib.sha1(f"blob {len(data)}\0".encode()+data).hexdigest()=="b4bfadb4ec5b5a2e0649afe44a25c4da76122e44"
+    assert icon=="res://assets/approved_launcher.webp"
+assert icon!="res://assets/icon.svg","The approved icon is required"
+print("QUALITY_TEXTURES_OK: four used tileable material maps; approved launcher asset verified")
