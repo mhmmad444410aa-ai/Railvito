@@ -1,0 +1,97 @@
+name: Railvito Android 1.2.0
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['Railvito_1.2.0_Godot_Source.zip']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GODOT_VERSION: 4.7.2
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      GODOT_ANDROID_KEYSTORE_RELEASE_USER: ${{ secrets.ANDROID_KEY_ALIAS }}
+      GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ runner.temp }}/railvito-release.keystore
+      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ runner.temp }}/railvito-debug.keystore
+      GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+      GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack source
+        run: |
+          test -s Railvito_1.2.0_Godot_Source.zip
+          unzip -q Railvito_1.2.0_Godot_Source.zip -d source
+          test -f source/Railvito/project.godot
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Godot and SDK
+        run: |
+          set -euo pipefail
+          sdkmanager "platform-tools" "build-tools;36.0.0"
+          base="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable"
+          curl -fL --retry 3 "$base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" -o "$RUNNER_TEMP/godot.zip"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
+          chmod +x "$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          sudo ln -s "$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
+          curl -fL --retry 3 "$base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz" -o "$RUNNER_TEMP/templates.tpz"
+          dir="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$dir" "$HOME/.config/godot" source/Railvito/build
+          unzip -j -q "$RUNNER_TEMP/templates.tpz" templates/android_debug.apk templates/android_release.apk templates/version.txt -d "$dir"
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\n' "$ANDROID_HOME" "$JAVA_HOME" > "$HOME/.config/godot/editor_settings-4.7.tres"
+      - name: Verify project and tests
+        working-directory: source/Railvito
+        run: |
+          set -euo pipefail
+          godot --headless --editor --import 2>&1 | tee build/import.log
+          if rg 'SCRIPT ERROR|^ERROR:' build/import.log; then exit 1; fi
+          timeout 60 godot --headless -- --self-test 2>&1 | tee build/self-test.log
+          rg 'RAILVITO_SELF_TEST_OK' build/self-test.log
+          for test in engines worlds cab; do
+            XDG_DATA_HOME="$RUNNER_TEMP/railvito-$test" timeout 60 godot --headless --script "res://tests/verify_$test.gd" 2>&1 | tee "build/$test.log"
+          done
+          if rg 'SCRIPT ERROR|^ERROR:' build/*.log; then exit 1; fi
+          rg 'TOAST_LIFETIME_CHECK_OK' build/engines.log
+          rg 'WORLD_EXPANSION_PASS' build/worlds.log
+          rg 'CAB_CHECK_OK' build/cab.log
+          python3 tools/verify_assets.py
+      - name: Build test APK
+        working-directory: source/Railvito
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -keystore "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH" -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Railvito Debug,C=JO"
+          godot --headless --export-debug Android build/Railvito-1.2.0-debug.apk 2>&1 | tee build/export-debug.log
+          test -s build/Railvito-1.2.0-debug.apk
+      - name: Build original-key signed release
+        if: env.KEYSTORE_BASE64 != ''
+        working-directory: source/Railvito
+        run: |
+          set -euo pipefail
+          test -n "$GODOT_ANDROID_KEYSTORE_RELEASE_USER"
+          test -n "$GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD"
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$GODOT_ANDROID_KEYSTORE_RELEASE_PATH"
+          godot --headless --export-release Android build/Railvito-1.2.0-release.apk 2>&1 | tee build/export-release.log
+          test -s build/Railvito-1.2.0-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs build/Railvito-1.2.0-release.apk > build/signature.txt
+          grep -qi '733a7d7008d1c10f9144cf289fbaba93ad0b7aecbb7c0c31b84cd1a8ebffee62' build/signature.txt
+          sha256sum build/Railvito-1.2.0-release.apk > build/SHA256SUMS.txt
+      - name: Remove signing keys
+        if: always()
+        run: rm -f "$GODOT_ANDROID_KEYSTORE_RELEASE_PATH" "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Railvito-Android
+          path: |
+            source/Railvito/build/*.apk
+            source/Railvito/build/*.log
+            source/Railvito/build/signature.txt
+            source/Railvito/build/SHA256SUMS.txt
+          if-no-files-found: warn
