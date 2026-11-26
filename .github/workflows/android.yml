@@ -15,15 +15,18 @@ jobs:
       KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       GODOT_ANDROID_KEYSTORE_RELEASE_USER: ${{ secrets.ANDROID_KEY_ALIAS }}
       GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ runner.temp }}/railvito-release.keystore
-      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ runner.temp }}/railvito-debug.keystore
       GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
       GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
     steps:
       - uses: actions/checkout@v4
+      - name: Configure temporary signing paths
+        run: |
+          echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$RUNNER_TEMP/railvito-release.keystore" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$RUNNER_TEMP/railvito-debug.keystore" >> "$GITHUB_ENV"
       - name: Unpack source
         run: |
-          test -s Railvito_1.2.0_Godot_Source.zip
+          test -s Railvito_1.2.0_Godot_Source.zip || { echo '::error::Source archive is not present in the repository'; exit 1; } 
+          echo 'f0e025d00415b0b5aa4044fc71e9f6ee5066d89abb87f04fb16a4306a89e1c20  Railvito_1.2.0_Godot_Source.zip' | sha256sum -c -
           unzip -q Railvito_1.2.0_Godot_Source.zip -d source
           test -f source/Railvito/project.godot
       - uses: actions/setup-java@v4
@@ -68,6 +71,7 @@ jobs:
           keytool -genkeypair -keystore "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH" -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Railvito Debug,C=JO"
           godot --headless --export-debug Android build/Railvito-1.2.0-debug.apk 2>&1 | tee build/export-debug.log
           test -s build/Railvito-1.2.0-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose build/Railvito-1.2.0-debug.apk
       - name: Build original-key signed release
         if: env.KEYSTORE_BASE64 != ''
         working-directory: source/Railvito
