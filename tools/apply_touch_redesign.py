@@ -21,8 +21,8 @@ palettes={"blue":("3786c5","1e5388"),"green":("439f58","28693a"),"red":("d65442"
 for name,(color,edge) in palettes.items():
     for state in ("normal","hover","pressed","disabled"):
         top=10 if state=="pressed" else 3
-        fill="#65778a" if state=="disabled" else color
-        stroke="#435465" if state=="disabled" else edge
+        fill="#65778a" if state=="disabled" else "#"+color
+        stroke="#435465" if state=="disabled" else "#"+edge
         sheen="0.14" if state=="hover" else "0.08"
         (a/(name+"_"+state+".svg")).write_text(f'<svg xmlns="http://www.w3.org/2000/svg" width="96" height="80" viewBox="0 0 96 80"><rect x="2" y="9" width="92" height="69" rx="19" fill="{stroke}"/><rect x="3" y="{top}" width="90" height="66" rx="18" fill="{fill}" stroke="{stroke}" stroke-width="3"/><rect x="7" y="{top+4}" width="82" height="24" rx="12" fill="#fff" opacity="{sheen}"/><path d="M14 {top+11}Q21 {top+7} 32 {top+8}" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".33"/></svg>')
 (a/"icon_home.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><path d="M5 30L32 7 59 30" fill="none" stroke="#fff4d9" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 29L32 15 49 29V55H15Z" fill="#fff4d9"/><rect x="26" y="36" width="12" height="19" rx="3" fill="#317db0"/></svg>')
@@ -366,3 +366,10 @@ func verify() -> void:
 	quit()
 ''')
 print("RAILVITO_1_6_PATCH_OK")
+
+# Keep the previous selection feedback meaningful while removing its redundant text bar.
+f=p/"scripts/main.gd";s=f.read_text()
+s=s.replace('Vector2(8+i*168,9),Vector2(160,78)','Vector2(8+i*168,5),Vector2(160,70)').replace('Vector2(344,9),Vector2(86,78)','Vector2(344,5),Vector2(86,70)').replace('Vector2(438,9),Vector2(86,78)','Vector2(438,5),Vector2(86,70)').replace('Vector2(532,9),Vector2(86,78)','Vector2(532,5),Vector2(86,70)').replace('Vector2(626,9),Vector2(101,78)','Vector2(626,5),Vector2(101,70)').replace('Vector2(12,83),Vector2(710,21)','Vector2(12,75),Vector2(710,25)')
+# Prevent a new click from using a stale pinch state after returning from a modal.
+s=s.replace('selected_kind=kind;dragging_piece=true;_update_selection()','selected_kind=kind;dragging_piece=true;pinch_used=false;_update_selection()',1)
+f.write_text(s)
