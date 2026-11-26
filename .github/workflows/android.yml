@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['Railvito_1.2.0_Godot_Source.zip']
+    paths: ['Railvito_1.2.0_Godot_Source.zip', '.github/workflows/android.yml']
 permissions:
   contents: read
 jobs:
@@ -33,11 +33,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
       - name: Install Godot and SDK
         run: |
           set -euo pipefail
-          sdkmanager "platform-tools" "build-tools;36.0.0"
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$sdkmanager" || sdkmanager="$(command -v sdkmanager)"
+          "$sdkmanager" "platform-tools" "build-tools;36.0.0"
           base="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable"
           curl -fL --retry 3 "$base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" -o "$RUNNER_TEMP/godot.zip"
           unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
