@@ -1,9 +1,9 @@
-name: Railvito Android 1.5.0
+name: Railvito Android 1.6.0
 on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['Railvito_1.2.0_Godot_Source.zip', '.github/workflows/android.yml', 'tools/apply_deluxe.py', 'tools/apply_visual_polish.py', 'tools/apply_quality.py', 'assets/railvito_launcher.webp', 'Railvito_Icon_512.png']
+    paths: ['Railvito_1.2.0_Godot_Source.zip', '.github/workflows/android.yml', 'tools/apply_deluxe.py', 'tools/apply_visual_polish.py', 'tools/apply_quality.py', 'tools/apply_touch_redesign.py', 'assets/railvito_launcher.webp', 'Railvito_Icon_512.png']
 permissions:
   contents: read
 jobs:
@@ -32,7 +32,8 @@ jobs:
           python3 tools/apply_deluxe.py
           python3 tools/apply_visual_polish.py
           python3 tools/apply_quality.py
-          grep -q 'config/version="1.5.0"' source/Railvito/project.godot
+          python3 tools/apply_touch_redesign.py
+          grep -q 'config/version="1.6.0"' source/Railvito/project.godot
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -63,7 +64,7 @@ jobs:
           if grep -E 'SCRIPT ERROR|^ERROR:' build/import.log; then exit 1; fi
           timeout 60 godot --headless -- --self-test 2>&1 | tee build/self-test.log
           grep -E 'RAILVITO_SELF_TEST_OK' build/self-test.log
-          for test in engines worlds cab deluxe polish quality; do
+          for test in engines worlds cab deluxe polish quality rails_ui; do
             XDG_DATA_HOME="$RUNNER_TEMP/railvito-$test" timeout 60 godot --headless --script "res://tests/verify_$test.gd" 2>&1 | tee "build/$test.log"
           done
           if grep -E 'SCRIPT ERROR|^ERROR:' build/*.log; then exit 1; fi
@@ -73,17 +74,18 @@ jobs:
           grep -E 'DELUXE_UI_PASS' build/deluxe.log
           grep -E 'POLISH_PASS' build/polish.log
           grep -E 'QUALITY_PASS' build/quality.log
+          grep -E 'RAILS_UI_PASS' build/rails_ui.log
           python3 tools/verify_assets.py
       - name: Build test APK
         working-directory: source/Railvito
         run: |
           set -euo pipefail
           keytool -genkeypair -keystore "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH" -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Railvito Debug,C=JO"
-          godot --headless --export-debug Android build/Railvito-1.5.0-debug.apk 2>&1 | tee build/export-debug.log
-          test -s build/Railvito-1.5.0-debug.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose build/Railvito-1.5.0-debug.apk
-          unzip -l build/Railvito-1.5.0-debug.apk | grep -E "mipmap|launcher" > build/launcher-resources.txt
-          sha256sum build/Railvito-1.5.0-debug.apk > build/debug-sha256.txt
+          godot --headless --export-debug Android build/Railvito-1.6.0-debug.apk 2>&1 | tee build/export-debug.log
+          test -s build/Railvito-1.6.0-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose build/Railvito-1.6.0-debug.apk
+          unzip -l build/Railvito-1.6.0-debug.apk | grep -E "mipmap|launcher" > build/launcher-resources.txt
+          sha256sum build/Railvito-1.6.0-debug.apk > build/debug-sha256.txt
       - name: Build original-key signed release
         if: env.KEYSTORE_BASE64 != ''
         working-directory: source/Railvito
@@ -93,11 +95,11 @@ jobs:
           test -n "$GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD"
           umask 077
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$GODOT_ANDROID_KEYSTORE_RELEASE_PATH"
-          godot --headless --export-release Android build/Railvito-1.5.0-release.apk 2>&1 | tee build/export-release.log
-          test -s build/Railvito-1.5.0-release.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs build/Railvito-1.5.0-release.apk > build/signature.txt
+          godot --headless --export-release Android build/Railvito-1.6.0-release.apk 2>&1 | tee build/export-release.log
+          test -s build/Railvito-1.6.0-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs build/Railvito-1.6.0-release.apk > build/signature.txt
           grep -qi '733a7d7008d1c10f9144cf289fbaba93ad0b7aecbb7c0c31b84cd1a8ebffee62' build/signature.txt
-          sha256sum build/Railvito-1.5.0-release.apk > build/SHA256SUMS.txt
+          sha256sum build/Railvito-1.6.0-release.apk > build/SHA256SUMS.txt
       - name: Archive verified updated source
         if: success()
         working-directory: source/Railvito
@@ -105,7 +107,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           from zipfile import ZipFile, ZIP_DEFLATED
-          with ZipFile('build/Railvito-1.5.0-source.zip', 'w', ZIP_DEFLATED) as z:
+          with ZipFile('build/Railvito-1.6.0-source.zip', 'w', ZIP_DEFLATED) as z:
               for f in Path('.').rglob('*'):
                   if f.is_file() and not any(x in f.parts for x in ('.godot', 'build', '.git')):
                       z.write(f, 'Railvito/'+f.as_posix())
