@@ -34,6 +34,22 @@ jobs:
           python3 tools/apply_quality.py
           python3 tools/apply_touch_redesign.py
           python3 tools/apply_corner_ui.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('source/Railvito/scripts/main.gd')
+          s=p.read_text()
+          old='\t_button(t("close"),Vector2(28,527),Vector2(630,64),func():_save();_close_modal();_game_ui() if screen=="game" else _show_menu() if screen=="menu" else _close_modal(),TEAL,p)'
+          assert old in s
+          s=s.replace(old,'\t_button(t("privacy"),Vector2(28,475),Vector2(630,46),_privacy,Color("e4ebd8"),p)\n'+old,1)
+          old='\t_button(t("close"),Vector2(28,362),Vector2(662,62),_close_modal,TEAL,p)'
+          assert old in s
+          s=s.replace(old,'\t_button(t("privacy_online"),Vector2(28,305),Vector2(662,49),func():OS.shell_open("https://mhmmad444410aa-ai.github.io/Privacy-Policies/railvito.html"),Color("e4ebd8"),p)\n'+old,1)
+          p.write_text(s)
+          p=Path('source/Railvito/scripts/strings.gd')
+          s=p.read_text().replace('const ADVENTURE_WORDS := {','const ADVENTURE_WORDS := {\n\t"privacy_online": ["Privacy policy website","سياسة الخصوصية على الويب","Política de privacidade online"],',1)
+          s=s.replace('This preview works offline.','This game works offline.').replace('تعمل هذه التجربة دون إنترنت.','تعمل هذه اللعبة دون إنترنت.').replace('Esta prévia funciona offline.','Este jogo funciona offline.')
+          p.write_text(s)
+          PY
           grep -q 'config/version="1.7.0"' source/Railvito/project.godot
       - uses: actions/setup-java@v4
         with:
