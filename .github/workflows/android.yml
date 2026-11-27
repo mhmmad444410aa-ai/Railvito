@@ -102,6 +102,24 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs build/Railvito-1.7.0-release.apk > build/signature.txt
           grep -qi '733a7d7008d1c10f9144cf289fbaba93ad0b7aecbb7c0c31b84cd1a8ebffee62' build/signature.txt
           sha256sum build/Railvito-1.7.0-release.apk > build/SHA256SUMS.txt
+      - name: Export unsigned production APK for offline original-key signing
+        if: env.KEYSTORE_BASE64 == ''
+        working-directory: source/Railvito
+        run: |
+          set -euo pipefail
+          cp export_presets.cfg "$RUNNER_TEMP/railvito-export-presets.cfg"
+          trap 'cp "$RUNNER_TEMP/railvito-export-presets.cfg" export_presets.cfg' EXIT
+          sed -i 's/^package\/signed=true$/package\/signed=false/' export_presets.cfg
+          godot --headless --export-release Android build/Railvito-1.7.0-unsigned.apk 2>&1 | tee build/export-release.log
+          test -s build/Railvito-1.7.0-unsigned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 build/Railvito-1.7.0-unsigned.apk || {
+            "$ANDROID_HOME/build-tools/36.0.0/zipalign" -P 16 -f 4 build/Railvito-1.7.0-unsigned.apk build/Railvito-aligned.apk
+            mv build/Railvito-aligned.apk build/Railvito-1.7.0-unsigned.apk
+          }
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 build/Railvito-1.7.0-unsigned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging build/Railvito-1.7.0-unsigned.apk > build/release-badging.txt
+          sha256sum build/Railvito-1.7.0-unsigned.apk > build/unsigned-sha256.txt
+          cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" build/apksigner.jar
       - name: Archive verified updated source
         if: success()
         working-directory: source/Railvito
@@ -128,5 +146,8 @@ jobs:
             source/Railvito/build/launcher-resources.txt
             source/Railvito/build/debug-sha256.txt
             source/Railvito/build/signature.txt
+            source/Railvito/build/apksigner.jar
+            source/Railvito/build/release-badging.txt
+            source/Railvito/build/unsigned-sha256.txt
             source/Railvito/build/SHA256SUMS.txt
           if-no-files-found: warn
