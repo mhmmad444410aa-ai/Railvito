@@ -128,48 +128,7 @@ jobs:
           sed -i 's/^package\/signed=true$/package\/signed=false/' export_presets.cfg
           # Godot validates release keystore settings even for an unsigned export.
           unset GODOT_ANDROID_KEYSTORE_RELEASE_PATH GODOT_ANDROID_KEYSTORE_RELEASE_USER GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD
-          grep -q '^package/signed=false
-          test -s build/Railvito-1.7.0-unsigned.apk
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 build/Railvito-1.7.0-unsigned.apk || {
-            "$ANDROID_HOME/build-tools/36.0.0/zipalign" -P 16 -f 4 build/Railvito-1.7.0-unsigned.apk build/Railvito-aligned.apk
-            mv build/Railvito-aligned.apk build/Railvito-1.7.0-unsigned.apk
-          }
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 build/Railvito-1.7.0-unsigned.apk
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging build/Railvito-1.7.0-unsigned.apk > build/release-badging.txt
-          sha256sum build/Railvito-1.7.0-unsigned.apk > build/unsigned-sha256.txt
-          cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" build/apksigner.jar
-      - name: Archive verified updated source
-        if: success()
-        working-directory: source/Railvito
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          from zipfile import ZipFile, ZIP_DEFLATED
-          with ZipFile('build/Railvito-1.7.0-source.zip', 'w', ZIP_DEFLATED) as z:
-              for f in Path('.').rglob('*'):
-                  if f.is_file() and not any(x in f.parts for x in ('.godot', 'build', '.git')):
-                      z.write(f, 'Railvito/'+f.as_posix())
-          PY
-      - name: Remove signing keys
-        if: always()
-        run: rm -f "$GODOT_ANDROID_KEYSTORE_RELEASE_PATH" "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: Railvito-Android
-          path: |
-            source/Railvito/build/*.apk
-            source/Railvito/build/*-source.zip
-            source/Railvito/build/*.log
-            source/Railvito/build/launcher-resources.txt
-            source/Railvito/build/debug-sha256.txt
-            source/Railvito/build/signature.txt
-            source/Railvito/build/apksigner.jar
-            source/Railvito/build/release-badging.txt
-            source/Railvito/build/unsigned-sha256.txt
-            source/Railvito/build/SHA256SUMS.txt
-          if-no-files-found: warn
- export_presets.cfg
+          grep -Fxq 'package/signed=false' export_presets.cfg
           godot --headless --export-release Android build/Railvito-1.7.0-unsigned.apk 2>&1 | tee build/export-release.log
           test -s build/Railvito-1.7.0-unsigned.apk
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 build/Railvito-1.7.0-unsigned.apk || {
