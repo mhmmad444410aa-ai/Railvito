@@ -1,15 +1,15 @@
-name: Railvito Android 1.7.0
+name: Railvito Android 1.8.0
 on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['Railvito_1.2.0_Godot_Source.zip', '.github/workflows/android.yml', 'tools/apply_deluxe.py', 'tools/apply_visual_polish.py', 'tools/apply_quality.py', 'tools/apply_touch_redesign.py', 'tools/apply_corner_ui.py', 'assets/railvito_launcher.webp', 'Railvito_Icon_512.png']
+    paths: ['Railvito_1.2.0_Godot_Source.zip', '.github/workflows/android.yml', 'tools/apply_deluxe.py', 'tools/apply_visual_polish.py', 'tools/apply_quality.py', 'tools/apply_touch_redesign.py', 'tools/apply_corner_ui.py', 'tools/apply_petal_ads.py', 'assets/railvito_launcher.webp', 'Railvito_Icon_512.png']
 permissions:
   contents: read
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 55
     env:
       GODOT_VERSION: 4.7.2
       KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -50,7 +50,8 @@ jobs:
           s=s.replace('This preview works offline.','This game works offline.').replace('تعمل هذه التجربة دون إنترنت.','تعمل هذه اللعبة دون إنترنت.').replace('Esta prévia funciona offline.','Este jogo funciona offline.')
           p.write_text(s)
           PY
-          grep -q 'config/version="1.7.0"' source/Railvito/project.godot
+          python3 tools/apply_petal_ads.py
+          grep -q 'config/version="1.8.0"' source/Railvito/project.godot
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -62,7 +63,7 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           test -x "$sdkmanager" || sdkmanager="$(command -v sdkmanager)"
-          "$sdkmanager" "platform-tools" "build-tools;36.0.0"
+          "$sdkmanager" "platform-tools" "build-tools;36.0.0" "platforms;android-36"
           base="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable"
           curl -fL --retry 3 "$base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" -o "$RUNNER_TEMP/godot.zip"
           unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
@@ -71,8 +72,14 @@ jobs:
           curl -fL --retry 3 "$base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz" -o "$RUNNER_TEMP/templates.tpz"
           dir="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
           mkdir -p "$dir" "$HOME/.config/godot" source/Railvito/build
-          unzip -j -q "$RUNNER_TEMP/templates.tpz" templates/android_debug.apk templates/android_release.apk templates/version.txt -d "$dir"
+          unzip -j -q "$RUNNER_TEMP/templates.tpz" templates/android_debug.apk templates/android_release.apk templates/android_source.zip templates/version.txt -d "$dir"
           printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\n' "$ANDROID_HOME" "$JAVA_HOME" > "$HOME/.config/godot/editor_settings-4.7.tres"
+      - name: Configure native ads Gradle template
+        run: |
+          set -euo pipefail
+          dir="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          python3 tools/apply_petal_ads.py "$dir/android_source.zip" "${GODOT_VERSION}.stable"
+          chmod +x source/Railvito/android/build/gradlew
       - name: Verify project and tests
         working-directory: source/Railvito
         run: |
@@ -99,11 +106,11 @@ jobs:
         run: |
           set -euo pipefail
           keytool -genkeypair -keystore "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH" -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Railvito Debug,C=JO"
-          godot --headless --export-debug Android build/Railvito-1.7.0-debug.apk 2>&1 | tee build/export-debug.log
-          test -s build/Railvito-1.7.0-debug.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose build/Railvito-1.7.0-debug.apk
-          unzip -l build/Railvito-1.7.0-debug.apk | grep -E "mipmap|launcher" > build/launcher-resources.txt
-          sha256sum build/Railvito-1.7.0-debug.apk > build/debug-sha256.txt
+          godot --headless --export-debug Android build/Railvito-1.8.0-debug.apk 2>&1 | tee build/export-debug.log
+          test -s build/Railvito-1.8.0-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose build/Railvito-1.8.0-debug.apk
+          unzip -l build/Railvito-1.8.0-debug.apk | grep -E "mipmap|launcher" > build/launcher-resources.txt
+          sha256sum build/Railvito-1.8.0-debug.apk > build/debug-sha256.txt
       - name: Build original-key signed release
         if: env.KEYSTORE_BASE64 != ''
         working-directory: source/Railvito
@@ -113,11 +120,11 @@ jobs:
           test -n "$GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD"
           umask 077
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$GODOT_ANDROID_KEYSTORE_RELEASE_PATH"
-          godot --headless --export-release Android build/Railvito-1.7.0-release.apk 2>&1 | tee build/export-release.log
-          test -s build/Railvito-1.7.0-release.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs build/Railvito-1.7.0-release.apk > build/signature.txt
+          godot --headless --export-release Android build/Railvito-1.8.0-release.apk 2>&1 | tee build/export-release.log
+          test -s build/Railvito-1.8.0-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs build/Railvito-1.8.0-release.apk > build/signature.txt
           grep -qi '733a7d7008d1c10f9144cf289fbaba93ad0b7aecbb7c0c31b84cd1a8ebffee62' build/signature.txt
-          sha256sum build/Railvito-1.7.0-release.apk > build/SHA256SUMS.txt
+          sha256sum build/Railvito-1.8.0-release.apk > build/SHA256SUMS.txt
       - name: Export unsigned production APK for offline original-key signing
         if: env.KEYSTORE_BASE64 == ''
         working-directory: source/Railvito
@@ -129,15 +136,24 @@ jobs:
           # Godot validates release keystore settings even for an unsigned export.
           unset GODOT_ANDROID_KEYSTORE_RELEASE_PATH GODOT_ANDROID_KEYSTORE_RELEASE_USER GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD
           grep -Fxq 'package/signed=false' export_presets.cfg
-          godot --headless --export-release Android build/Railvito-1.7.0-unsigned.apk 2>&1 | tee build/export-release.log
-          test -s build/Railvito-1.7.0-unsigned.apk
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 build/Railvito-1.7.0-unsigned.apk || {
-            "$ANDROID_HOME/build-tools/36.0.0/zipalign" -P 16 -f 4 build/Railvito-1.7.0-unsigned.apk build/Railvito-aligned.apk
-            mv build/Railvito-aligned.apk build/Railvito-1.7.0-unsigned.apk
+          godot --headless --export-release Android build/Railvito-1.8.0-unsigned.apk 2>&1 | tee build/export-release.log
+          test -s build/Railvito-1.8.0-unsigned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 build/Railvito-1.8.0-unsigned.apk || {
+            "$ANDROID_HOME/build-tools/36.0.0/zipalign" -P 16 -f 4 build/Railvito-1.8.0-unsigned.apk build/Railvito-aligned.apk
+            mv build/Railvito-aligned.apk build/Railvito-1.8.0-unsigned.apk
           }
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 build/Railvito-1.7.0-unsigned.apk
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging build/Railvito-1.7.0-unsigned.apk > build/release-badging.txt
-          sha256sum build/Railvito-1.7.0-unsigned.apk > build/unsigned-sha256.txt
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 build/Railvito-1.8.0-unsigned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging build/Railvito-1.8.0-unsigned.apk > build/release-badging.txt
+          sha256sum build/Railvito-1.8.0-unsigned.apk > build/unsigned-sha256.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump xmltree build/Railvito-1.8.0-unsigned.apk AndroidManifest.xml > build/release-manifest.txt
+          grep -q 'org.godotengine.plugin.v2.RailvitoAds' build/release-manifest.txt
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          with ZipFile('build/Railvito-1.8.0-unsigned.apk') as z:
+              dex=b''.join(z.read(n) for n in z.namelist() if n.endswith('.dex'))
+              for term in (b'v6hj6tigae',b'd58nfmswrt',b'RailvitoAds'):
+                  assert term in dex, term
+          PY
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" build/apksigner.jar
       - name: Archive verified updated source
         if: success()
@@ -146,7 +162,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           from zipfile import ZipFile, ZIP_DEFLATED
-          with ZipFile('build/Railvito-1.7.0-source.zip', 'w', ZIP_DEFLATED) as z:
+          with ZipFile('build/Railvito-1.8.0-source.zip', 'w', ZIP_DEFLATED) as z:
               for f in Path('.').rglob('*'):
                   if f.is_file() and not any(x in f.parts for x in ('.godot', 'build', '.git')):
                       z.write(f, 'Railvito/'+f.as_posix())
@@ -167,6 +183,7 @@ jobs:
             source/Railvito/build/signature.txt
             source/Railvito/build/apksigner.jar
             source/Railvito/build/release-badging.txt
+            source/Railvito/build/release-manifest.txt
             source/Railvito/build/unsigned-sha256.txt
             source/Railvito/build/SHA256SUMS.txt
           if-no-files-found: warn
