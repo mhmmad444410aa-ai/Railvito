@@ -170,7 +170,7 @@ jobs:
       - name: Remove signing keys
         if: always()
         run: rm -f "$GODOT_ANDROID_KEYSTORE_RELEASE_PATH" "$GODOT_ANDROID_KEYSTORE_DEBUG_PATH"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: Railvito-Android
